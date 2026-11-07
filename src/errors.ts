@@ -5,7 +5,13 @@ import type { AuthField } from './validate'
 
 /** What went wrong, in a form the screen can show. */
 export interface AuthError {
-  /** Stable, for translating: `invalid_credentials`, `invalid_email`, `too_short`, `email_taken`, `unavailable`… The set is open: handle an unknown code by its `status`. */
+  /**
+   * Stable, for translating. The server's are the protocol's
+   * (`invalid_credentials`, `invalid_email`, `email_taken`, `unavailable`…);
+   * the checks this package runs before sending add their own, such as
+   * `too_short` (those come with no `status`). The set is open: handle an
+   * unknown code by its `status`.
+   */
   code: string
   message: string
   /** The input it is about, when it is about one. */
@@ -30,7 +36,12 @@ export const PROTOCOL_ERROR_CODES = [
 ] as const
 export type ProtocolErrorCode = (typeof PROTOCOL_ERROR_CODES)[number]
 
-/** A refusal as the protocol sends it, or `unavailable` when the body is not one. */
+/**
+ * A refusal as the protocol sends it, or `unavailable` when the body is not
+ * one. `unavailable` with a 4xx `status` (a 404 most often) means the answer
+ * did not come from a Cauthy backend: the route is not mounted under
+ * `basePath`, or another handler answered it.
+ */
 export function errorFrom(status: number, body: unknown): AuthError {
   const e = (body as { error?: { code?: unknown; message?: unknown; field?: unknown; reasons?: unknown } } | null)?.error
   if (!e || typeof e.code !== 'string') return { ...UNAVAILABLE, status }

@@ -51,7 +51,7 @@ Every POST carries `X-Cauthy-Request: 1`. Every answer must carry `Cauthy-Protoc
 
 ## Errors
 
-`r.error` is `{ code, message, field?, reasons?, status? }`; the codes are the protocol's (`PROTOCOL_ERROR_CODES`). Prefer exceptions? `unwrap(await auth.signIn.email(…))` throws a `CauthyError`.
+`r.error` is `{ code, message, field?, reasons?, status? }`; the codes are the protocol's (`PROTOCOL_ERROR_CODES`). Prefer exceptions? `unwrap(await auth.signIn.email(…))` throws a `CauthyError`. An `unavailable` error with a 4xx `status` (usually 404) means the request did not reach a Cauthy backend: check `basePath`, and that no other handler answers under it.
 
 ## Passkeys and Google One Tap
 
