@@ -6,6 +6,8 @@ export default defineConfig({
   dts: true,
   splitting: false,
   sourcemap: true,
+  // Shipped minified, with its source maps: what an application downloads is what the budget measures.
+  minify: true,
   clean: true,
   // It runs in the browser, and in Node while a framework renders on the server.
   target: 'es2020',

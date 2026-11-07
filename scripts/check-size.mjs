@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The bundle budget: every JavaScript entry npm publishes stays at or under
-// 15 kB gzipped. It measures the files as shipped (not minified), so an
-// application that minifies ships less than this. Run after `npm run build`.
+// 15 kB gzipped, measured on the files as shipped (minified, as tsup builds
+// them). Run after `npm run build`.
 //
 //   node scripts/check-size.mjs
 import { readdirSync, readFileSync } from 'node:fs'

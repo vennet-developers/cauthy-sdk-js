@@ -74,7 +74,7 @@ npm run check:package     # build, publint, attw, the bundle budget, the tarball
 SPEC_DIR=../cauthy-sdk-spec npm run check:routes   # the route table against the spec commit spec.lock pins
 ```
 
-The bundle budget is 15 kB gzipped for every JavaScript entry as published (`npm run check:size` after a build). `package.json` records, under `allowScripts`, that no dependency's install script runs: tsup's esbuild takes its binary from its platform package (`@esbuild/<platform>`), and `fsevents` ships prebuilt, so neither postinstall is needed.
+The build ships minified, with source maps. The bundle budget is 15 kB gzipped for every JavaScript entry as published (`npm run check:size` after a build). `package.json` records, under `allowScripts`, that no dependency's install script runs: tsup's esbuild takes its binary from its platform package (`@esbuild/<platform>`), and `fsevents` ships prebuilt, so neither postinstall is needed.
 
 ## License
 
