@@ -1,0 +1,59 @@
+{
+  "name": "@cauthyhq/js",
+  "version": "1.0.0",
+  "description": "The browser client of the Cauthy auth-bff protocol: session state, typed calls and the sign-in flow, with no framework.",
+  "license": "Apache-2.0",
+  "author": "Vennet Developers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vennet-developers/cauthy-sdk-js.git"
+  },
+  "homepage": "https://github.com/vennet-developers/cauthy-sdk-js#readme",
+  "bugs": "https://github.com/vennet-developers/cauthy-sdk-js/issues",
+  "cauthy": {
+    "protocol": 1
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.mts", "default": "./dist/index.mjs" },
+      "require": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+    },
+    "./theme": {
+      "import": { "types": "./dist/theme.d.mts", "default": "./dist/theme.mjs" },
+      "require": { "types": "./dist/theme.d.ts", "default": "./dist/theme.js" }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "LICENSE", "NOTICE"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "gen:routes": "node scripts/gen-routes.mjs",
+    "check:routes": "sh scripts/check-routes.sh",
+    "check:fixtures": "sh scripts/check-fixtures.sh",
+    "check:package": "sh scripts/check-package.sh",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": ["cauthy", "auth", "authentication", "session", "bff", "passkey", "webauthn", "browser"],
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@types/node": "20.19.41",
+    "cauthy-auth": "0.42.0",
+    "jsdom": "26.1.0",
+    "publint": "0.3.25",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4",
+    "yaml": "2.8.1"
+  }
+}
