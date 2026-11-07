@@ -27,7 +27,7 @@ function spec(): string {
 }
 
 function generate(specDir: string) {
-  const out = join(specDir, 'routes.ts')
+  const out = join(specDir, 'generated')
   return spawnSync(process.execPath, [join(root, 'scripts/gen-routes.mjs'), out], { env: { ...process.env, SPEC_DIR: specDir }, encoding: 'utf8' })
 }
 

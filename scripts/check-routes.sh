@@ -1,5 +1,5 @@
 #!/bin/sh
-# src/generated/routes.ts must be exactly what scripts/gen-routes.mjs writes
+# src/generated must be exactly what scripts/gen-routes.mjs writes
 # from the spec commit spec.lock pins. SPEC_DIR names a checkout of
 # cauthy-sdk-spec at that commit; without it, the commit is fetched.
 set -eu
@@ -19,6 +19,6 @@ else
   [ "$have" = "$ref" ] || { echo "SPEC_DIR is at $have; spec.lock pins $ref" >&2; exit 2; }
   git -C "$spec" diff --quiet HEAD || { echo "SPEC_DIR has uncommitted changes; check against a clean checkout" >&2; exit 2; }
 fi
-SPEC_DIR="$spec" node scripts/gen-routes.mjs "$tmp/routes.ts" >/dev/null
-diff -u src/generated/routes.ts "$tmp/routes.ts" || { echo "src/generated/routes.ts is stale: run SPEC_DIR=<spec checkout> npm run gen:routes" >&2; exit 1; }
+SPEC_DIR="$spec" node scripts/gen-routes.mjs "$tmp/generated" >/dev/null
+diff -ru src/generated "$tmp/generated" || { echo "src/generated is stale: run SPEC_DIR=<spec checkout> npm run gen:routes" >&2; exit 1; }
 echo "routes: current with cauthy-sdk-spec $ref"

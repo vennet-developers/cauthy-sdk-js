@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ROUTE_DETAILS } from './generated/route-details'
 import { PREFIX, PROTOCOL, ROUTES, type PostRouteId, type RouteBodies, type RouteId } from './generated/routes'
 
 describe('the route table', () => {
@@ -29,8 +30,17 @@ describe('the route table', () => {
   })
 
   it('says which answers are redirects and which stream', () => {
-    expect(ROUTES['hosted.login'].redirect).toBe(true)
-    expect(ROUTES['sign-in.mfa_push_events'].stream).toBe(true)
-    expect(ROUTES['session.get'].fields).toEqual({ session: 'object?', status: 'string' })
+    expect(ROUTE_DETAILS['hosted.login'].redirect).toBe(true)
+    expect(ROUTE_DETAILS['sign-in.mfa_push_events'].stream).toBe(true)
+    expect(ROUTE_DETAILS['session.get'].fields).toEqual({ session: 'object?', status: 'string' })
+  })
+
+  it('ships only method, path and deprecated at runtime; the details stay with the tests', () => {
+    expect(Object.keys(ROUTE_DETAILS)).toEqual(Object.keys(ROUTES))
+    for (const id of Object.keys(ROUTES) as RouteId[]) {
+      expect(Object.keys(ROUTES[id]).sort(), id).toEqual(['deprecated', 'method', 'path'])
+      const { method, path, deprecated } = ROUTE_DETAILS[id]
+      expect(ROUTES[id], id).toEqual({ method, path, deprecated })
+    }
   })
 })

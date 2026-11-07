@@ -20,6 +20,11 @@ done
 node -e "const p=require('./package.json'); const d=Object.keys(p.dependencies??{}); if (d.length) { console.error('runtime dependencies are not allowed: '+d.join(', ')); process.exit(1) }"
 
 node scripts/check-size.mjs
+# The whole route table is for tests and tooling; the bundle ships only ROUTES.
+if grep -l 'ROUTE_DETAILS\|crosssite' dist/*.js dist/*.mjs; then
+  echo "the route details reached the bundle" >&2
+  exit 1
+fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
