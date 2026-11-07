@@ -93,3 +93,40 @@ describe('the client', () => {
     ])
   })
 })
+
+describe('waiting for the phone', () => {
+  const opened: string[] = []
+  beforeEach(() => {
+    opened.length = 0
+    vi.stubGlobal('EventSource', class {
+      static CLOSED = 2
+      readyState = 1
+      onerror: (() => void) | null = null
+      private on: Record<string, (e: MessageEvent) => void> = {}
+      constructor(url: string) {
+        opened.push(url)
+        setTimeout(() => this.on.status?.(new MessageEvent('status', { data: '{"status":"approved"}' })), 0)
+      }
+      addEventListener(name: string, f: (e: MessageEvent) => void) {
+        this.on[name] = f
+      }
+      close() {}
+    })
+  })
+
+  it('does not start when the page already gave up', async () => {
+    const ctl = new AbortController()
+    ctl.abort()
+    expect(await createAuthClient().signIn.mfaPushWait({ signal: ctl.signal })).toEqual({ ok: false, error: { code: 'aborted', message: 'Stopped waiting.' } })
+    expect(opened).toEqual([])
+    expect(sent).toEqual([])
+  })
+
+  it('lets go of the page signal once the phone answered', async () => {
+    routes['/sign-in/mfa/push/finish'] = () => ({ body: { status: 'signed_in', session: {} } })
+    const ctl = new AbortController()
+    const remove = vi.spyOn(ctl.signal, 'removeEventListener')
+    expect(await createAuthClient().signIn.mfaPushWait({ signal: ctl.signal })).toMatchObject({ ok: true, status: 'signed_in' })
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+})

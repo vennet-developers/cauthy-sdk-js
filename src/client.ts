@@ -605,13 +605,16 @@ export function createAuthClient(options: AuthClientOptions = {}): AuthClient {
       mfaPush: () => post('sign-in.mfa_push', {}),
       async mfaPushWait(o = {}) {
         const status = await new Promise<string>((resolve) => {
+          if (o.signal?.aborted) return resolve('aborted')
           if (typeof EventSource !== 'function') return resolve('approved') // finish says whether it was
           const source = new EventSource(t.href('sign-in.mfa_push_events'), { withCredentials: true })
+          const aborted = () => stop('aborted')
           const stop = (st: string) => {
             source.close()
+            o.signal?.removeEventListener('abort', aborted)
             resolve(st)
           }
-          o.signal?.addEventListener('abort', () => stop('aborted'))
+          o.signal?.addEventListener('abort', aborted, { once: true })
           source.addEventListener('status', (e) => {
             const st = (() => {
               try {
