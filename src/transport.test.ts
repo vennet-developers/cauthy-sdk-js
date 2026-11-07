@@ -93,3 +93,14 @@ describe('an application handler that throws', () => {
     expect(await createTransport({ fetch: r.fetch, onProtocolMismatch: () => { throw new Error('boom') } }).read('organizations.members', { id: 'o1' })).toEqual({ members: [] })
   })
 })
+
+describe('what the server says of ok and next', () => {
+  it('cannot override ok, and only a valid next on a sign-in route survives', async () => {
+    const odd = server(() => Response.json({ status: 'saved', ok: false, next: 'teleport', account: {} }, { headers: strict }))
+    expect(await createTransport({ fetch: odd.fetch }).post('me.save', { name: 'Ana' })).toEqual({ ok: true, status: 'saved', account: {} })
+    const notStep = server(() => Response.json({ status: 'signed_in', ok: false, next: 'teleport' }, { headers: strict }))
+    expect(await createTransport({ fetch: notStep.fetch }).post('sign-in.email', { email: 'ana@acme.com', password: 'p' })).toEqual({ ok: true, status: 'signed_in', next: 'done' })
+    const noStep = server(() => Response.json({ status: 'saved', next: 'teleport' }, { headers: strict }))
+    expect(await createTransport({ fetch: noStep.fetch }).post('sign-in.email', { email: 'ana@acme.com', password: 'p' })).toEqual({ ok: true, status: 'saved' })
+  })
+})

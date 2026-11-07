@@ -85,8 +85,11 @@ export function createTransport(options: TransportOptions = {}): Transport {
       watch(res)
       const answer = (await res.json().catch(() => null)) as Record<string, unknown> | null
       if (res.ok && answer && typeof answer.status === 'string') {
+        // The server's own `ok` and `next` never pass through as they are:
+        // `ok` is this client's, and `next` only when valid for a sign-in route.
+        const { ok: _ok, next: _next, ...rest } = answer
         const next = nextFrom(path, answer)
-        return { ok: true, ...answer, ...(next ? { next } : {}) }
+        return { ...rest, ok: true, ...(next ? { next } : {}) }
       }
       return { ok: false, error: errorFrom(res.status, answer) }
     } catch {
