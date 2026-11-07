@@ -6,6 +6,7 @@
 //
 //   SPEC_DIR=../cauthy-sdk-spec npm run gen:routes      # writes the file
 //   node scripts/gen-routes.mjs /tmp/routes.ts          # writes elsewhere (check-routes.sh)
+import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,6 +15,22 @@ import { parse } from 'yaml'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const spec = resolve(process.env.SPEC_DIR ?? resolve(root, '../cauthy-sdk-spec'))
 const out = resolve(process.argv[2] ?? resolve(root, 'src/generated/routes.ts'))
+
+// The table must be the pinned spec's: the checkout at spec.lock's commit, with no change of its own.
+const pinned = readFileSync(resolve(root, 'spec.lock'), 'utf8').trim()
+const git = (...args) => execFileSync('git', ['-C', spec, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+let have
+try {
+  have = git('rev-parse', 'HEAD')
+} catch {
+  throw new Error(`${spec} is not a git checkout of cauthy-sdk-spec; spec.lock pins ${pinned}`)
+}
+if (have !== pinned) throw new Error(`SPEC_DIR is at ${have}; spec.lock pins ${pinned}`)
+try {
+  git('diff', '--quiet', 'HEAD')
+} catch {
+  throw new Error(`${spec} has uncommitted changes; the table must be the pinned spec's`)
+}
 
 const table = parse(readFileSync(resolve(spec, 'protocol/routes.yaml'), 'utf8'))
 const version = Number(readFileSync(resolve(spec, 'VERSION'), 'utf8').trim())

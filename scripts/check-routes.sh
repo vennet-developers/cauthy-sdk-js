@@ -17,6 +17,7 @@ if [ -z "$spec" ]; then
 else
   have=$(git -C "$spec" rev-parse HEAD)
   [ "$have" = "$ref" ] || { echo "SPEC_DIR is at $have; spec.lock pins $ref" >&2; exit 2; }
+  git -C "$spec" diff --quiet HEAD || { echo "SPEC_DIR has uncommitted changes; check against a clean checkout" >&2; exit 2; }
 fi
 SPEC_DIR="$spec" node scripts/gen-routes.mjs "$tmp/routes.ts" >/dev/null
 diff -u src/generated/routes.ts "$tmp/routes.ts" || { echo "src/generated/routes.ts is stale: run SPEC_DIR=<spec checkout> npm run gen:routes" >&2; exit 1; }
