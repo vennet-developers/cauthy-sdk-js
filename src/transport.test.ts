@@ -83,3 +83,13 @@ describe('the mount point', () => {
     expect(createTransport({ basePath: '/auth' }).href('session.get')).toBe('/auth/session')
   })
 })
+
+describe('an application handler that throws', () => {
+  it('does not change the answer of the request', async () => {
+    const { fetch } = server(() => Response.json({ status: 'sent' }))
+    const t = createTransport({ fetch, onProtocolMismatch: () => { throw new Error('boom') } })
+    expect(await t.post('sign-in.forgot_password', { email: 'ana@acme.com' })).toEqual({ ok: true, status: 'sent' })
+    const r = server(() => Response.json({ members: [] }))
+    expect(await createTransport({ fetch: r.fetch, onProtocolMismatch: () => { throw new Error('boom') } }).read('organizations.members', { id: 'o1' })).toEqual({ members: [] })
+  })
+})

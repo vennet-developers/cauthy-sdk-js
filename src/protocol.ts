@@ -75,7 +75,12 @@ export function watchProtocol(base: string, onMismatch?: ProtocolMismatch): (res
     if (onMismatch) {
       if (!told) {
         told = true
-        onMismatch(seen)
+        // The application's handler never changes what the request answers.
+        try {
+          onMismatch(seen)
+        } catch {
+          // ignored on purpose
+        }
       }
       return
     }

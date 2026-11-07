@@ -67,3 +67,12 @@ describe('the protocol header', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 })
+
+describe('a mismatch handler that throws', () => {
+  it('never escapes the check', () => {
+    const watch = watchProtocol('/api/auth', () => {
+      throw new Error('boom')
+    })
+    expect(() => watch(new Response('{}'))).not.toThrow()
+  })
+})
