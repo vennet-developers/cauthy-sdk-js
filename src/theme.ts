@@ -541,27 +541,34 @@ export function themeFromCss(css: string | string[], options: CssThemeOptions = 
  * the layout and the words are Cauthy's pages' matter, and left out.
  */
 export function themeVariables(theme: CauthyTheme): Record<string, string> {
+  // Every value is checked before it becomes a property: a value that is
+  // more than a value (a `;`, a `url(…)`, a quote) is dropped, never written.
   const vars: Record<string, string> = {}
-  const put = (name: string, v: string | number | undefined) => {
-    if (v === undefined || v === '') return
-    vars[`--cauthy-${name}`] = typeof v === 'number' ? `${v}px` : v
+  const color = (name: string, v: unknown) => {
+    const c = typeof v === 'string' ? toColor(v) : null
+    if (c !== null) vars[`--cauthy-${name}`] = c
   }
-  put('surface', theme.surface)
-  put('text', theme.text)
-  put('text-muted', theme.textMuted)
-  put('border', theme.border)
-  put('input-background', theme.inputBackground)
-  put('input-border', theme.inputBorder)
-  put('primary', theme.primary)
-  put('primary-text', theme.primaryText)
-  put('accent', theme.accent)
-  put('error', theme.error)
-  put('error-background', theme.errorBackground)
-  put('success', theme.success)
-  put('success-background', theme.successBackground)
-  put('radius', theme.radius)
-  put('button-radius', theme.buttonRadius)
-  put('font', theme.fontFamily)
+  const length = (name: string, v: unknown) => {
+    const px = radiusOf(v)
+    if (px !== null) vars[`--cauthy-${name}`] = `${px}px`
+  }
+  color('surface', theme.surface)
+  color('text', theme.text)
+  color('text-muted', theme.textMuted)
+  color('border', theme.border)
+  color('input-background', theme.inputBackground)
+  color('input-border', theme.inputBorder)
+  color('primary', theme.primary)
+  color('primary-text', theme.primaryText)
+  color('accent', theme.accent)
+  color('error', theme.error)
+  color('error-background', theme.errorBackground)
+  color('success', theme.success)
+  color('success-background', theme.successBackground)
+  length('radius', theme.radius)
+  length('button-radius', theme.buttonRadius)
+  const font = typeof theme.fontFamily === 'string' ? toFont(theme.fontFamily) : null
+  if (font !== null) vars['--cauthy-font'] = font
   return vars
 }
 
@@ -584,16 +591,126 @@ export function toWire(theme: CauthyTheme): Record<string, unknown> {
   return wire
 }
 
-/** A theme as Cauthy answers it, in this package's names. */
-export function fromWire(wire: Record<string, unknown>): CauthyTheme {
-  const names: Record<string, keyof CauthyTheme> = {
-    background: 'background', surface: 'surface', text: 'text', text_muted: 'textMuted', border: 'border',
-    primary: 'primary', primary_text: 'primaryText', accent: 'accent', error: 'error', error_background: 'errorBackground',
-    success: 'success', success_background: 'successBackground', radius: 'radius', button_radius: 'buttonRadius',
-    font_family: 'fontFamily', logo_url: 'logoUrl', fonts: 'fonts', layout: 'layout', panel_colors: 'panelColors',
-    panel_text: 'panelText', panel_icon_url: 'panelIconUrl', texts: 'texts', input_background: 'inputBackground', input_border: 'inputBorder', tokens: 'tokens',
+/** A corner in pixels, 0–40: a finite number, or a length in px, rem or em. Null otherwise. */
+function radiusOf(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? Math.min(MAX_RADIUS, Math.max(0, Math.round(v))) : null
+  return typeof v === 'string' ? toRadius(v) : null
+}
+
+/** An https address with nothing in it that could end a CSS `url(…)` or an attribute. */
+function httpsUrl(v: unknown): string | null {
+  if (typeof v !== 'string' || v.length > 2048 || !/^https:\/\/[^\s"'()<>\\`]+$/i.test(v)) return null
+  try {
+    return new URL(v).protocol === 'https:' ? v : null
+  } catch {
+    return null
   }
-  const theme: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(wire ?? {})) if (names[k] && v !== undefined && v !== null && v !== '') theme[names[k]] = v
-  return theme as CauthyTheme
+}
+
+/**
+ * A colour as Cauthy stores and answers it: the forms `toColor` writes
+ * (`#rrggbb`, `#rrggbbaa`, `rgba(r, g, b, a)`), and nothing else. Reading only
+ * these keeps the colour conversions out of the root entry.
+ */
+function wireColor(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const c = v.trim().toLowerCase()
+  if (/^#([0-9a-f]{6}|[0-9a-f]{8})$/.test(c)) return c
+  const m = /^rgba\((\d{1,3}), ?(\d{1,3}), ?(\d{1,3}), ?(0|1|0?\.\d{1,4})\)$/.exec(c)
+  return m && [m[1], m[2], m[3]].every((n) => Number(n) <= 255) ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${Number(m[4])})` : null
+}
+
+const balancedQuotes = (v: string) => (v.match(/"/g)?.length ?? 0) % 2 === 0 && (v.match(/'/g)?.length ?? 0) % 2 === 0
+const WIRE_COLORS: [string, keyof CauthyTheme][] = [
+  ['background', 'background'], ['surface', 'surface'], ['text', 'text'], ['text_muted', 'textMuted'], ['border', 'border'],
+  ['input_background', 'inputBackground'], ['input_border', 'inputBorder'], ['primary', 'primary'], ['primary_text', 'primaryText'],
+  ['accent', 'accent'], ['error', 'error'], ['error_background', 'errorBackground'], ['success', 'success'],
+  ['success_background', 'successBackground'], ['panel_text', 'panelText'],
+]
+
+function fontOf(v: unknown): ThemeFont | null {
+  const f = v as Partial<ThemeFont> | null
+  if (!f || typeof f !== 'object' || typeof f.family !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9 _-]{0,99}$/.test(f.family)) return null
+  const url = httpsUrl(f.url)
+  if (url === null || !/\.woff2$/i.test(new URL(url).pathname)) return null
+  const font: ThemeFont = { family: f.family, url }
+  if (typeof f.weight === 'number' && Number.isInteger(f.weight) && f.weight >= 1 && f.weight <= 1000) font.weight = f.weight
+  else if (typeof f.weight === 'string' && /^\d{1,4}( \d{1,4})?$/.test(f.weight)) font.weight = f.weight
+  if (f.style === 'normal' || f.style === 'italic') font.style = f.style
+  return font
+}
+
+function textsOf(v: unknown): Record<string, ThemeTexts> | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const out: Record<string, ThemeTexts> = {}
+  const str = (s: unknown) => (typeof s === 'string' && s.trim() !== '' && s.length <= 500 ? s : undefined)
+  for (const [lang, t] of Object.entries(v as Record<string, unknown>)) {
+    if (!/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(lang) || !t || typeof t !== 'object') continue
+    const given = t as Record<string, unknown>
+    const texts: ThemeTexts = {}
+    const heading = str(given.heading)
+    const subheading = str(given.subheading)
+    if (heading) texts.heading = heading
+    if (subheading) texts.subheading = subheading
+    if (Array.isArray(given.panel)) {
+      const panel = given.panel.map(str).filter((s): s is string => s !== undefined).slice(0, 5)
+      if (panel.length) texts.panel = panel
+    }
+    if (Array.isArray(given.links)) {
+      const links = given.links
+        .map((l) => ({ label: str((l as { label?: unknown })?.label), url: httpsUrl((l as { url?: unknown })?.url) }))
+        .filter((l): l is { label: string; url: string } => l.label !== undefined && l.url !== null)
+        .slice(0, 4)
+      if (links.length) texts.links = links
+    }
+    if (Object.keys(texts).length) out[lang] = texts
+  }
+  return Object.keys(out).length ? out : null
+}
+
+/**
+ * A theme as Cauthy answers it, in this package's names. Every value is
+ * checked as it is read: a colour must be in the form `toColor` writes, a corner a
+ * length, a typeface a plain font list, an image or font an https address;
+ * anything else is dropped.
+ */
+export function fromWire(wire: Record<string, unknown>): CauthyTheme {
+  const w = wire ?? {}
+  const theme: CauthyTheme = {}
+  const t = theme as Record<string, unknown>
+  for (const [from, to] of WIRE_COLORS) {
+    const c = wireColor(w[from])
+    if (c !== null) t[to] = c
+  }
+  const radius = radiusOf(w.radius)
+  if (radius !== null) theme.radius = radius
+  const buttonRadius = radiusOf(w.button_radius)
+  if (buttonRadius !== null) theme.buttonRadius = buttonRadius
+  const font = typeof w.font_family === 'string' ? toFont(w.font_family) : null
+  if (font !== null) theme.fontFamily = font
+  const logo = httpsUrl(w.logo_url)
+  if (logo !== null) theme.logoUrl = logo
+  const icon = httpsUrl(w.panel_icon_url)
+  if (icon !== null) theme.panelIconUrl = icon
+  if (w.layout === 'card' || w.layout === 'split') theme.layout = w.layout
+  if (Array.isArray(w.panel_colors)) {
+    const colors = w.panel_colors.map(wireColor).filter((c): c is string => c !== null).slice(0, 4)
+    if (colors.length) theme.panelColors = colors
+  }
+  if (Array.isArray(w.fonts)) {
+    const fonts = w.fonts.map(fontOf).filter((f): f is ThemeFont => f !== null)
+    if (fonts.length) theme.fonts = fonts
+  }
+  const texts = textsOf(w.texts)
+  if (texts) theme.texts = texts
+  if (w.tokens && typeof w.tokens === 'object' && !Array.isArray(w.tokens)) {
+    const tokens: Record<string, string> = {}
+    for (const [name, value] of Object.entries(w.tokens as Record<string, unknown>)) {
+      if (!/^--sm-[a-z0-9-]{1,80}$/.test(name) || typeof value !== 'string') continue
+      const v = tokenValue(value)
+      if (v !== null && balancedQuotes(v)) tokens[name] = v
+    }
+    if (Object.keys(tokens).length) theme.tokens = tokens
+  }
+  return theme
 }

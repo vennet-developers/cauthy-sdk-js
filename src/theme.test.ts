@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cssVariables, themeFromCss, themeFromStackmyth, themeVariables, toColor, toWire, tokensFromStackmyth } from './theme'
+import { cssVariables, fromWire, themeFromCss, themeFromStackmyth, themeVariables, toColor, toWire, tokensFromStackmyth } from './theme'
 
 // A Stackmyth theme file, as the library ships them.
 const STACKMYTH = `
@@ -247,5 +247,67 @@ describe('the browser package', () => {
 describe('the wire form', () => {
   it('is empty for an empty theme', () => {
     expect(toWire({})).toEqual({})
+  })
+})
+
+const HOSTILE = [
+  'red;background-image:url(https://evil.test/x)',
+  'url(https://evil.test/x)',
+  'expression(alert(1))',
+  '#fff\n;color:red',
+  '"#fff"',
+  "'#fff'",
+  '#fff}body{display:none',
+  'var(--x);x:y',
+]
+
+describe('a theme becoming CSS variables', () => {
+  it('keeps colours, corners and the typeface it can read, as it reads them', () => {
+    expect(themeVariables({ primary: '#E8590C', text: 'rgb(0, 0, 0)', radius: 12, buttonRadius: 99, fontFamily: '"Outfit", sans-serif' })).toEqual({
+      '--cauthy-primary': '#e8590c', '--cauthy-text': '#000000', '--cauthy-radius': '12px', '--cauthy-button-radius': '40px', '--cauthy-font': '"Outfit", sans-serif',
+    })
+  })
+
+  it('drops every value that would be more than a value', () => {
+    for (const bad of HOSTILE) {
+      expect(themeVariables({ primary: bad, surface: bad, accent: bad, fontFamily: bad }), bad).toEqual({})
+    }
+    expect(themeVariables({ radius: Number.NaN, buttonRadius: Number.POSITIVE_INFINITY })).toEqual({})
+    expect(themeVariables({ radius: 'url(x)' as unknown as number, buttonRadius: '1rem;x:y' as unknown as number })).toEqual({})
+    expect(themeVariables({ primary: 42 as unknown as string })).toEqual({})
+  })
+})
+
+describe('a theme as Cauthy answers it', () => {
+  it('keeps what it can check, in this package\'s names', () => {
+    expect(fromWire({
+      primary: '#E8590C', text_muted: 'rgba(0,0,0,0.5)', radius: 12, button_radius: '1rem', font_family: 'Outfit, sans-serif',
+      logo_url: 'https://cdn.example.com/logo.svg', layout: 'split', panel_colors: ['#112233', 'url(x)'],
+      fonts: [{ family: 'Outfit', url: 'https://cdn.example.com/outfit.woff2', weight: '100 900', style: 'italic' }],
+      texts: { es: { heading: 'Entrar', panel: ['Hola'], links: [{ label: 'Privacidad', url: 'https://acme.com/privacy' }] } },
+      tokens: { '--sm-bg-interactive': '#0f1113' },
+    })).toEqual({
+      primary: '#e8590c', textMuted: 'rgba(0, 0, 0, 0.5)', radius: 12, buttonRadius: 16, fontFamily: 'Outfit, sans-serif',
+      logoUrl: 'https://cdn.example.com/logo.svg', layout: 'split', panelColors: ['#112233'],
+      fonts: [{ family: 'Outfit', url: 'https://cdn.example.com/outfit.woff2', weight: '100 900', style: 'italic' }],
+      texts: { es: { heading: 'Entrar', panel: ['Hola'], links: [{ label: 'Privacidad', url: 'https://acme.com/privacy' }] } },
+      tokens: { '--sm-bg-interactive': '#0f1113' },
+    })
+  })
+
+  it('drops every hostile value', () => {
+    for (const bad of HOSTILE) {
+      expect(fromWire({
+        primary: bad, surface: bad, panel_text: bad, radius: bad, font_family: bad, logo_url: bad, panel_icon_url: bad, layout: bad,
+        panel_colors: [bad], fonts: [{ family: bad, url: bad }],
+        // A quoted string is a value a token may hold (a font name); anything that breaks out is not.
+        tokens: { ...(/^(["']).*\1$/.test(bad) ? {} : { '--sm-x': bad }), [bad]: '#fff' },
+      }), bad).toEqual({})
+    }
+    expect(fromWire({ logo_url: 'http://cdn.example.com/logo.svg', panel_icon_url: 'javascript:alert(1)' })).toEqual({})
+    expect(fromWire({ fonts: [{ family: 'Outfit', url: 'https://cdn.example.com/x.woff2)' }] })).toEqual({})
+    expect(fromWire({ radius: Number.NaN })).toEqual({})
+    expect(fromWire({ tokens: { '--sm-x': '"unbalanced' } })).toEqual({})
+    expect(fromWire({ texts: { es: { links: [{ label: 'x', url: 'javascript:alert(1)' }] }, 'e"s': { heading: 'x' } } })).toEqual({})
   })
 })
