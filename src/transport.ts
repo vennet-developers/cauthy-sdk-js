@@ -7,7 +7,7 @@
 import { errorFrom, UNAVAILABLE, type AuthError } from './errors'
 import { ROUTES, type GetRouteId, type PostRouteId, type RouteBodies, type RouteId } from './generated/routes'
 import { nextFrom, REQUEST_HEADER, watchProtocol, type ProtocolMismatch } from './protocol'
-import { withoutTrailingSlashes } from './url'
+import { isLocalPath, withoutTrailingSlashes } from './url'
 import type { FieldProblem } from './validate'
 
 export interface TransportOptions {
@@ -37,12 +37,13 @@ export interface Transport {
 
 /**
  * `basePath` without trailing slashes. It must be a path on the page's own
- * origin: an absolute URL, a protocol-relative one (`//host`, `/\host`) or a
- * relative path would send the session's requests elsewhere, so it throws.
+ * origin: an absolute URL, a protocol-relative one (`//host`, `/\host`,
+ * `/\t/host`) or a relative path would send the session's requests
+ * elsewhere, so it throws.
  */
 export function mountPoint(basePath: string = '/api/auth'): string {
-  if (typeof basePath !== 'string' || !basePath.startsWith('/') || basePath.startsWith('//') || basePath.startsWith('/\\')) {
-    throw new TypeError(`@cauthyhq/js: basePath must be a path on this origin, starting with "/" (not "//" or "/\\"); got ${JSON.stringify(basePath)}`)
+  if (!isLocalPath(basePath)) {
+    throw new TypeError(`@cauthyhq/js: basePath must be a path on this origin: one leading "/", no backslash, no control character; got ${JSON.stringify(basePath)}`)
   }
   return withoutTrailingSlashes(basePath)
 }

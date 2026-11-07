@@ -76,7 +76,7 @@ describe('the transport', () => {
 
 describe('the mount point', () => {
   it('is a path on this origin, or the transport refuses to start, naming the value', () => {
-    for (const bad of ['https://evil.example.com/api/auth', '//evil.example.com/api/auth', '/\\evil.example.com', 'api/auth', '']) {
+    for (const bad of ['https://evil.example.com/api/auth', '//evil.example.com/api/auth', '/\\evil.example.com', '/\t/evil.example.com', '/\n/evil.example.com', '/api\\auth', '/api/au\u0000th', 'api/auth', '']) {
       expect(() => createTransport({ basePath: bad }), bad).toThrow(TypeError)
       expect(() => createTransport({ basePath: bad }), bad).toThrow(JSON.stringify(bad))
     }
