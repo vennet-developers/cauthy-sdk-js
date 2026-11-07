@@ -201,3 +201,75 @@ describe('an answer that a sign-in overtook', () => {
     expect(asked).toEqual(['GET /api/auth/session', 'POST /api/auth/sign-in/email', 'GET /api/auth/session'])
   })
 })
+
+describe('the store, toward its listeners', () => {
+  it('waits for the token within what a timer can hold, and a minute when the expiry is unreadable', () => {
+    const timeout = vi.spyOn(globalThis, 'setTimeout')
+    const far = createSessionStore({ fetch: server().fetch, initialSession: ana({ expiresAt: '2100-01-01T00:00:00Z' }) })
+    const stopFar = far.subscribe(() => undefined)
+    expect(timeout.mock.calls.at(-1)?.[1]).toBe(2 ** 31 - 1)
+    stopFar()
+    const odd = createSessionStore({ fetch: server().fetch, initialSession: ana({ expiresAt: 'not a time' }) })
+    const stopOdd = odd.subscribe(() => undefined)
+    expect(timeout.mock.calls.at(-1)?.[1]).toBe(60_000)
+    stopOdd()
+  })
+
+  it('tells a listener only when who is signed in actually changed', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { fetch } = server(ana())
+    const store = createSessionStore({ fetch })
+    const heard: string[] = []
+    store.subscribe((s) => heard.push(s.status))
+    await settle()
+    const before = store.get()
+    await store.refresh()
+    await store.refresh()
+    expect(heard).toEqual(['loading', 'authenticated'])
+    expect(store.get()).toBe(before)
+  })
+
+  it('keeps telling the others when one listener throws', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { fetch } = server(null)
+    const store = createSessionStore({ fetch, initialSession: null })
+    store.subscribe((s) => {
+      if (s.session) throw new Error('a broken listener')
+    })
+    const heard: string[] = []
+    store.subscribe((s) => heard.push(s.status))
+    await expect(store.auth.signIn.email({ email: 'ana@acme.com', password: 'right-password' })).resolves.toMatchObject({ ok: true })
+    expect(heard).toEqual(['unauthenticated', 'authenticated'])
+    expect(error).toHaveBeenCalledTimes(1)
+  })
+
+  it('tells the application of a protocol mismatch once, for the store and its client together', async () => {
+    const { fetch } = server(null)
+    const told: (string | null)[] = []
+    const store = createSessionStore({ fetch, onProtocolMismatch: (seen) => told.push(seen) })
+    await store.refresh()
+    await store.auth.forgotPassword({ email: 'ana@acme.com' })
+    expect(told).toEqual([null])
+  })
+})
+
+describe('other tabs', () => {
+  it('hear a sign-in or sign-out, with no token in the message, and ask again', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { world, fetch } = server(null)
+    const said: unknown[] = []
+    const ear = new BroadcastChannel('cauthy-session')
+    ear.onmessage = (e) => said.push(e.data)
+    const otherTab = createSessionStore({ fetch, initialSession: null })
+    const stop = otherTab.subscribe(() => undefined)
+    const thisTab = createSessionStore({ fetch, initialSession: null })
+    await thisTab.auth.signIn.email({ email: 'ana@acme.com', password: 'right-password' })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(otherTab.get().status).toBe('authenticated')
+    expect(said).toEqual([{ type: 'changed', basePath: '/api/auth' }])
+    expect(world.asked.filter((a) => a === 'GET /api/auth/session')).toHaveLength(2)
+    stop()
+    ear.close()
+  })
+})

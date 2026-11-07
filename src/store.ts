@@ -8,7 +8,9 @@
 //
 // While somebody listens it asks the server who is signed in, asks again
 // shortly before the session's token runs out, and when the tab is looked at
-// again. With nobody listening it does nothing.
+// again. With nobody listening it does nothing. A sign-in or sign-out made
+// through `store.auth` is told to the store of every other tab of the page's
+// origin (BroadcastChannel `cauthy-session`, no token in it), which asks again.
 
 import { createAuthClient, type AuthClient, type AuthClientOptions } from './client'
 import { watchProtocol } from './protocol'
@@ -59,11 +61,27 @@ export interface SessionStore {
 
 /** Ask again this long before the session's token runs out. */
 const AHEAD_MS = 60_000
+/** The longest wait a browser timer holds (about 24.8 days). */
+const MAX_TIMER_MS = 2 ** 31 - 1
+/** Where a tab says that who is signed in changed. The message names the mount point, never a token. */
+const CHANNEL = 'cauthy-session'
+
+const sameSession = (a: PublicSession | null, b: PublicSession | null) => a === b || (a !== null && b !== null && JSON.stringify(a) === JSON.stringify(b))
 
 export function createSessionStore(options: SessionStoreOptions = {}): SessionStore {
   const base = mountPoint(options.basePath)
   const doFetch: typeof fetch = (...args) => (options.fetch ?? fetch)(...args)
-  const watch = watchProtocol(base, options.onProtocolMismatch)
+  // One mismatch told once, whether the store's ask or its client's call saw it.
+  const given = options.onProtocolMismatch
+  let mismatchTold = false
+  const onProtocolMismatch = given
+    ? (seen: string | null) => {
+        if (mismatchTold) return
+        mismatchTold = true
+        given(seen)
+      }
+    : undefined
+  const watch = watchProtocol(base, onProtocolMismatch)
   const first = options.initialSession
   let state: SessionState = { session: first ?? null, status: first === undefined ? 'loading' : first === null ? 'unauthenticated' : 'authenticated' }
   const listeners = new Set<(state: SessionState) => void>()
@@ -74,18 +92,28 @@ export function createSessionStore(options: SessionStoreOptions = {}): SessionSt
   let timer: ReturnType<typeof setTimeout> | undefined
   let asked = first !== undefined
 
+  let channel: BroadcastChannel | null = null
+
   const set = (next: SessionState) => {
-    if (next.session === state.session && next.status === state.status) return
+    if (next.status === state.status && sameSession(next.session, state.session)) return
     state = next
     schedule()
-    for (const l of [...listeners]) l(state)
+    for (const l of [...listeners]) {
+      // One broken listener does not keep the others from hearing.
+      try {
+        l(state)
+      } catch (e) {
+        console.error('@cauthyhq/js: a session listener threw', e)
+      }
+    }
   }
 
   function schedule(): void {
     clearTimeout(timer)
     timer = undefined
     if (listeners.size === 0 || state.session === null) return
-    const wait = Math.max(new Date(state.session.expiresAt).getTime() - Date.now() - AHEAD_MS, 5_000)
+    const at = Date.parse(state.session.expiresAt)
+    const wait = Number.isFinite(at) ? Math.min(Math.max(at - Date.now() - AHEAD_MS, 5_000), MAX_TIMER_MS) : AHEAD_MS
     timer = setTimeout(() => void refresh(), wait)
   }
 
@@ -140,12 +168,41 @@ export function createSessionStore(options: SessionStoreOptions = {}): SessionSt
   }
   const signOutUrl = () => `${base}/logout`
 
-  const client = createAuthClient({ ...options, basePath: base })
-  // What changes who is signed in is followed by asking again.
+  const client = createAuthClient({ ...options, basePath: base, onProtocolMismatch })
+
+  /** Tells the other tabs that who is signed in changed. */
+  function tell(): void {
+    if (typeof BroadcastChannel !== 'function') return
+    try {
+      const out = channel ?? new BroadcastChannel(CHANNEL)
+      out.postMessage({ type: 'changed', basePath: base })
+      if (out !== channel) out.close()
+    } catch {
+      // A browser that refuses the channel only misses the courtesy.
+    }
+  }
+  function hear(): void {
+    if (typeof BroadcastChannel !== 'function') return
+    try {
+      channel = new BroadcastChannel(CHANNEL)
+      channel.onmessage = (e: MessageEvent) => {
+        const m = e.data as { type?: unknown; basePath?: unknown } | null
+        if (m?.type !== 'changed' || m.basePath !== base) return
+        generation++
+        void refresh()
+      }
+    } catch {
+      channel = null
+    }
+  }
+
+  // What changes who is signed in is followed by asking again, here and in the other tabs.
   const then = async <T,>(running: Promise<T>): Promise<T> => {
     const r = await running
     generation++
     await refresh()
+    // A refused call changed nothing the other tabs need to hear.
+    if ((r as { ok?: unknown } | null)?.ok !== false) tell()
     return r
   }
 
@@ -155,6 +212,7 @@ export function createSessionStore(options: SessionStoreOptions = {}): SessionSt
       listeners.add(listener)
       if (listeners.size === 1 && inBrowser()) {
         document.addEventListener('visibilitychange', onVisible)
+        hear()
         schedule()
         if (!asked) void refresh()
       }
@@ -165,6 +223,8 @@ export function createSessionStore(options: SessionStoreOptions = {}): SessionSt
           clearTimeout(timer)
           timer = undefined
           if (inBrowser()) document.removeEventListener('visibilitychange', onVisible)
+          channel?.close()
+          channel = null
         }
       }
     },
