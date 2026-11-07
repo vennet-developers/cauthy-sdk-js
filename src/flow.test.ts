@@ -97,3 +97,23 @@ describe('where a step may send the page', () => {
     }
   })
 })
+
+describe('starting again while a request runs', () => {
+  it('wins: the late answer does not move the flow', async () => {
+    let release: () => void = () => {}
+    const fetch = (async () => {
+      await new Promise<void>((r) => (release = r))
+      return Response.json({ status: 'signed_in', session, next: 'done' }, { headers: { 'cauthy-protocol': '1' } })
+    }) as unknown as typeof globalThis.fetch
+    const flow = createSignInFlow(createAuthClient({ fetch }))
+    const running = flow.password({ email: 'ana@acme.com', password: 'right-password' })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(flow.get().busy).toBe(true)
+    flow.reset()
+    release()
+    expect(await running).toEqual({ step: { name: 'start' }, busy: false, error: null })
+    expect(flow.get()).toEqual({ step: { name: 'start' }, busy: false, error: null })
+    // And it can be used again at once.
+    expect(flow.get().busy).toBe(false)
+  })
+})

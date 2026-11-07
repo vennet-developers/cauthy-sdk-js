@@ -87,6 +87,8 @@ export function stepAfter(answer: Ok, from: FlowStep): FlowStep {
 export function createSignInFlow(auth: AuthClient): SignInFlow {
   let state: FlowState = { step: START, busy: false, error: null }
   const listeners = new Set<(s: FlowState) => void>()
+  // Bumped by reset(): an answer to a request made before it is dropped.
+  let round = 0
   const set = (next: FlowState) => {
     state = next
     for (const l of [...listeners]) l(state)
@@ -94,6 +96,7 @@ export function createSignInFlow(auth: AuthClient): SignInFlow {
 
   async function run(action: () => Promise<unknown>): Promise<FlowState> {
     if (state.busy) return state
+    const mine = round
     set({ ...state, busy: true, error: null })
     let answer: Answer
     try {
@@ -101,6 +104,7 @@ export function createSignInFlow(auth: AuthClient): SignInFlow {
     } catch {
       answer = { ok: false, error: UNAVAILABLE }
     }
+    if (mine !== round) return state
     set(answer.ok ? { step: stepAfter(answer, state.step), busy: false, error: null } : { ...state, busy: false, error: answer.error })
     return state
   }
@@ -127,6 +131,7 @@ export function createSignInFlow(auth: AuthClient): SignInFlow {
     passkey: (o) => run(() => auth.signIn.passkey(o)),
     oneTap: (o) => run(() => auth.signIn.googleOneTap(o)),
     reset() {
+      round++
       set({ step: START, busy: false, error: null })
     },
   }
