@@ -243,3 +243,9 @@ describe('the browser package', () => {
     expect(await import('./theme')).not.toHaveProperty('pushTheme')
   })
 })
+
+describe('the wire form', () => {
+  it('is empty for an empty theme', () => {
+    expect(toWire({})).toEqual({})
+  })
+})
