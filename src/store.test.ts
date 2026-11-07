@@ -169,3 +169,35 @@ describe('the store mount point', () => {
     expect(() => createSessionStore({ basePath: '//evil.example.com' })).toThrow(TypeError)
   })
 })
+
+describe('an answer that a sign-in overtook', () => {
+  it('is not the last word: the store asks again after it', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let session: PublicSession | null = null
+    const held: (() => void)[] = []
+    const asked: string[] = []
+    const fetch = (async (url: string, init?: RequestInit) => {
+      const path = String(url)
+      asked.push(`${init?.method ?? 'GET'} ${path}`)
+      if (path === '/api/auth/session') {
+        // What the server knew when it was asked, answered only when released.
+        const knew = session
+        const answer = () => Response.json({ session: knew, status: knew ? 'authenticated' : 'unauthenticated' })
+        if (asked.filter((a) => a === 'GET /api/auth/session').length === 1) return new Promise<Response>((r) => held.push(() => r(answer())))
+        return answer()
+      }
+      session = ana()
+      return Response.json({ status: 'signed_in', session })
+    }) as unknown as typeof globalThis.fetch
+    const store = createSessionStore({ fetch })
+    store.subscribe(() => undefined)
+    expect(held).toHaveLength(1) // the first ask is still open
+    const signing = store.auth.signIn.email({ email: 'ana@acme.com', password: 'right-password' })
+    await settle()
+    held[0]() // the open ask answers "nobody": it was asked before the sign-in
+    await signing
+    expect(store.get().status).toBe('authenticated')
+    expect(store.get().session?.user.email).toBe('ana@acme.com')
+    expect(asked).toEqual(['GET /api/auth/session', 'POST /api/auth/sign-in/email', 'GET /api/auth/session'])
+  })
+})

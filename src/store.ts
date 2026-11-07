@@ -68,6 +68,9 @@ export function createSessionStore(options: SessionStoreOptions = {}): SessionSt
   let state: SessionState = { session: first ?? null, status: first === undefined ? 'loading' : first === null ? 'unauthenticated' : 'authenticated' }
   const listeners = new Set<(state: SessionState) => void>()
   let asking: Promise<PublicSession | null> | null = null
+  // Bumped by every call that changes who is signed in: an answer to an ask
+  // made before the bump is stale, and the store asks again.
+  let generation = 0
   let timer: ReturnType<typeof setTimeout> | undefined
   let asked = first !== undefined
 
@@ -86,21 +89,36 @@ export function createSessionStore(options: SessionStoreOptions = {}): SessionSt
     timer = setTimeout(() => void refresh(), wait)
   }
 
+  /** One ask of the server: its answer, or null when it could not say. */
+  async function askOnce(): Promise<{ session: PublicSession | null; status: string } | null> {
+    try {
+      const res = await doFetch(`${base}/session`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
+      watch(res)
+      if (!res.ok) return null
+      return (await res.json()) as { session: PublicSession | null; status: string }
+    } catch {
+      return null
+    }
+  }
+
   function refresh(): Promise<PublicSession | null> {
     asked = true
     asking ??= (async () => {
       try {
-        const res = await doFetch(`${base}/session`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
-        watch(res)
-        if (!res.ok) throw new Error(String(res.status))
-        const body = (await res.json()) as { session: PublicSession | null; status: string }
-        // "expired" is the server unable to reach Cauthy: what is on screen
-        // stays, and the next ask settles it.
-        if (body.status !== 'expired') set({ session: body.session, status: body.session ? 'authenticated' : 'unauthenticated' })
-        return body.session
-      } catch {
-        if (state.status === 'loading') set({ session: null, status: 'unauthenticated' })
-        return null
+        for (;;) {
+          const asOf = generation
+          const body = await askOnce()
+          // Who is signed in changed while this ask was out: ask again.
+          if (asOf !== generation) continue
+          if (body === null) {
+            if (state.status === 'loading') set({ session: null, status: 'unauthenticated' })
+            return null
+          }
+          // "expired" is the server unable to reach Cauthy: what is on screen
+          // stays, and the next ask settles it.
+          if (body.status !== 'expired') set({ session: body.session, status: body.session ? 'authenticated' : 'unauthenticated' })
+          return body.session
+        }
       } finally {
         asking = null
       }
@@ -126,6 +144,7 @@ export function createSessionStore(options: SessionStoreOptions = {}): SessionSt
   // What changes who is signed in is followed by asking again.
   const then = async <T,>(running: Promise<T>): Promise<T> => {
     const r = await running
+    generation++
     await refresh()
     return r
   }
