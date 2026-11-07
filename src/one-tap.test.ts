@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
-import { promptGoogleOneTap } from './one-tap'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { loadGoogleIdentity, promptGoogleOneTap } from './one-tap'
 
 type Callback = (r: { credential?: string }) => void
 type Listener = (moment: Record<string, () => unknown>) => void
@@ -50,5 +50,51 @@ describe('Google One Tap', () => {
     ctl.abort()
     expect(await waiting).toBeNull()
     expect(id.cancelled).toBe(true)
+  })
+})
+
+describe("Google's script", () => {
+  const added: HTMLScriptElement[] = []
+  const realAppend = document.head.appendChild.bind(document.head)
+  afterEach(() => {
+    added.length = 0
+    document.head.appendChild = realAppend
+  })
+  const watchScripts = () => {
+    document.head.appendChild = (<T extends Node>(node: T): T => {
+      added.push(node as unknown as HTMLScriptElement)
+      return node
+    }) as typeof document.head.appendChild
+  }
+
+  it('carries the page CSP nonce when given one', async () => {
+    watchScripts()
+    const loading = loadGoogleIdentity({ nonce: 'csp-n1' })
+    expect(added[0].getAttribute('nonce')).toBe('csp-n1')
+    google(() => {})
+    added[0].onload!(new Event('load'))
+    await loading
+  })
+
+  it('is fetched again after a load that left no google behind', async () => {
+    watchScripts()
+    const first = loadGoogleIdentity()
+    added[0].onload!(new Event('load'))
+    await expect(first).rejects.toThrow(/did not load/)
+    const second = loadGoogleIdentity()
+    expect(added).toHaveLength(2)
+    google(() => {})
+    added[1].onload!(new Event('load'))
+    await expect(second).resolves.toBeDefined()
+  })
+
+  it('stops listening to the page signal once the prompt settled', async () => {
+    const id = google((callback) => callback({ credential: 'google-jwt' }))
+    const ctl = new AbortController()
+    const remove = vi.spyOn(ctl.signal, 'removeEventListener')
+    expect(await promptGoogleOneTap({ clientId: 'c', nonce: 'n', signal: ctl.signal })).toBe('google-jwt')
+    ctl.abort()
+    expect(id.cancelled).toBe(false)
+    expect(remove).toHaveBeenCalled()
   })
 })

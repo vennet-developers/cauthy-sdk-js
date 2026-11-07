@@ -532,6 +532,8 @@ export interface AuthClientOptions extends TransportOptions {
    * under `basePath`. Default: one console warning per page and mount point.
    */
   onProtocolMismatch?: (seen: string | null) => void
+  /** The page's Content Security Policy nonce, put on Google's One Tap script when it loads. */
+  scriptNonce?: string
 }
 
 /** How long Cauthy waits for a passkey ceremony to be answered. */
@@ -682,7 +684,7 @@ export function createAuthClient(options: AuthClientOptions = {}): AuthClient {
         if (!begun.ok) return begun
         let credential: string | null
         try {
-          credential = await promptGoogleOneTap({ clientId: begun.clientId, nonce: begun.nonce, context: o.context, signal: o.signal })
+          credential = await promptGoogleOneTap({ clientId: begun.clientId, nonce: begun.nonce, context: o.context, signal: o.signal, scriptNonce: options.scriptNonce })
         } catch {
           return { ok: false, error: { code: 'unavailable', message: 'Google could not be reached. Try again, or sign in another way.' } }
         }
