@@ -48,7 +48,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "gen:routes": "node scripts/gen-routes.mjs",

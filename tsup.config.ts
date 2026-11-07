@@ -10,4 +10,6 @@ export default defineConfig({
   // It runs in the browser, and in Node while a framework renders on the server.
   target: 'es2020',
   platform: 'neutral',
+  // The browser's types only: a Node global in src fails the build.
+  tsconfig: 'tsconfig.build.json',
 })

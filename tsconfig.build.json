@@ -1,0 +1,10 @@
+{
+  // The published sources, checked with the browser's types only: no Node
+  // global (process, Buffer, require) may reach the package.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+}
