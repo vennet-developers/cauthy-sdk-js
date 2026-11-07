@@ -73,3 +73,13 @@ describe('the transport', () => {
     expect(t.href('session.get')).toBe('/auth/session')
   })
 })
+
+describe('the mount point', () => {
+  it('is a path on this origin, or the transport refuses to start, naming the value', () => {
+    for (const bad of ['https://evil.example.com/api/auth', '//evil.example.com/api/auth', '/\\evil.example.com', 'api/auth', '']) {
+      expect(() => createTransport({ basePath: bad }), bad).toThrow(TypeError)
+      expect(() => createTransport({ basePath: bad }), bad).toThrow(JSON.stringify(bad))
+    }
+    expect(createTransport({ basePath: '/auth' }).href('session.get')).toBe('/auth/session')
+  })
+})

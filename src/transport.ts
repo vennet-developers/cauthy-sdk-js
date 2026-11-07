@@ -35,8 +35,20 @@ export interface Transport {
   get(id: GetRouteId, query?: Query): Promise<{ ok: true; body: any } | { ok: false; error: AuthError }>
 }
 
+/**
+ * `basePath` without trailing slashes. It must be a path on the page's own
+ * origin: an absolute URL, a protocol-relative one (`//host`, `/\host`) or a
+ * relative path would send the session's requests elsewhere, so it throws.
+ */
+export function mountPoint(basePath: string = '/api/auth'): string {
+  if (typeof basePath !== 'string' || !basePath.startsWith('/') || basePath.startsWith('//') || basePath.startsWith('/\\')) {
+    throw new TypeError(`@cauthyhq/js: basePath must be a path on this origin, starting with "/" (not "//" or "/\\"); got ${JSON.stringify(basePath)}`)
+  }
+  return withoutTrailingSlashes(basePath)
+}
+
 export function createTransport(options: TransportOptions = {}): Transport {
-  const base = withoutTrailingSlashes(options.basePath ?? '/api/auth')
+  const base = mountPoint(options.basePath)
   const doFetch: typeof fetch = (...args) => (options.fetch ?? fetch)(...args)
   const watch = watchProtocol(base, options.onProtocolMismatch)
   const lang = (): Record<string, string> => {

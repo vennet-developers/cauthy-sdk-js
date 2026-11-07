@@ -163,3 +163,9 @@ describe('the store of @cauthyhq/js', () => {
     expect(told).toEqual([null])
   })
 })
+
+describe('the store mount point', () => {
+  it('refuses a basePath on another origin', () => {
+    expect(() => createSessionStore({ basePath: '//evil.example.com' })).toThrow(TypeError)
+  })
+})

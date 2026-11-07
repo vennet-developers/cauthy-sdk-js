@@ -12,8 +12,8 @@
 
 import { createAuthClient, type AuthClient, type AuthClientOptions } from './client'
 import { watchProtocol } from './protocol'
+import { mountPoint } from './transport'
 import type { PublicSession } from './types'
-import { withoutTrailingSlashes } from './url'
 
 export interface SessionState {
   /** The signed-in person and their organizations, or null. */
@@ -61,7 +61,7 @@ export interface SessionStore {
 const AHEAD_MS = 60_000
 
 export function createSessionStore(options: SessionStoreOptions = {}): SessionStore {
-  const base = withoutTrailingSlashes(options.basePath ?? '/api/auth')
+  const base = mountPoint(options.basePath)
   const doFetch: typeof fetch = (...args) => (options.fetch ?? fetch)(...args)
   const watch = watchProtocol(base, options.onProtocolMismatch)
   const first = options.initialSession
