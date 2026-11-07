@@ -17,6 +17,7 @@ import type { AuthClient } from './client'
 import { UNAVAILABLE, type AuthError } from './errors'
 import type { NextStep } from './protocol'
 import type { PublicSession } from './types'
+import { isLocalPath } from './url'
 
 export type FlowStep =
   | { name: 'start' }
@@ -26,9 +27,9 @@ export type FlowStep =
   | { name: 'verify_email'; email: string }
   /** A code (and a link) went out by mail: ask for the code. */
   | { name: 'code'; sentTo?: string }
-  /** Signed in. `returnTo`: where a mailed link said to go. */
+  /** Signed in. `returnTo`: where a mailed link said to go; only ever a path on this origin. */
   | { name: 'done'; session: PublicSession | null; returnTo?: string }
-  /** The browser is being sent elsewhere (a passkey on Cauthy's page). */
+  /** The browser is being sent elsewhere (a passkey on Cauthy's page). `location`, when given, is only ever a path on this origin. */
   | { name: 'redirect'; location?: string }
 
 export interface FlowState {
@@ -68,7 +69,7 @@ const NO_CODE: AuthError = { code: 'step_expired', message: 'No code was asked f
 export function stepAfter(answer: Ok, from: FlowStep): FlowStep {
   switch (answer.next) {
     case 'done':
-      return { name: 'done', session: (answer.session as PublicSession | undefined) ?? null, ...(typeof answer.returnTo === 'string' ? { returnTo: answer.returnTo } : {}) }
+      return { name: 'done', session: (answer.session as PublicSession | undefined) ?? null, ...(isLocalPath(answer.returnTo) ? { returnTo: answer.returnTo } : {}) }
     case 'mfa':
       // A code sent again keeps the step as it was.
       return from.name === 'mfa' ? from : { name: 'mfa', ...(answer.method === 'email' ? { method: 'email' as const } : {}) }
@@ -77,7 +78,7 @@ export function stepAfter(answer: Ok, from: FlowStep): FlowStep {
     case 'code':
       return { name: 'code', ...(typeof answer.sentTo === 'string' ? { sentTo: answer.sentTo } : {}) }
     case 'redirect':
-      return { name: 'redirect', ...(typeof answer.location === 'string' ? { location: answer.location } : {}) }
+      return { name: 'redirect', ...(isLocalPath(answer.location) ? { location: answer.location } : {}) }
     default:
       return answer.status === 'redirected' ? { name: 'redirect' } : from
   }

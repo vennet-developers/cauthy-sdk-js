@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createAuthClient } from './client'
-import { createSignInFlow, type FlowState } from './flow'
+import { createSignInFlow, stepAfter, type FlowState } from './flow'
 
 const session = { user: { id: 'u1', email: 'ana@acme.com', name: 'Ana', emailVerified: true, restricted: false }, tenantId: 't1', roles: [], organizations: [], expiresAt: '2026-11-07T20:00:00Z' }
 
@@ -83,5 +83,17 @@ describe('the sign-in flow', () => {
     await flow.password({ email: 'ana@acme.com', password: 'p' })
     flow.reset()
     expect(flow.get()).toEqual({ step: { name: 'start' }, busy: false, error: null })
+  })
+})
+
+describe('where a step may send the page', () => {
+  it('keeps returnTo and location only when they are paths on this origin', () => {
+    const start = { name: 'start' } as const
+    expect(stepAfter({ ok: true, status: 'signed_in', next: 'done', returnTo: '/deals' }, start)).toEqual({ name: 'done', session: null, returnTo: '/deals' })
+    expect(stepAfter({ ok: true, status: 'redirected', next: 'redirect', location: '/hosted' }, start)).toEqual({ name: 'redirect', location: '/hosted' })
+    for (const bad of ['https://evil.example.com', '//evil.example.com', '/\\evil.example.com', '/\t/evil.example.com', 'javascript:alert(1)']) {
+      expect(stepAfter({ ok: true, status: 'signed_in', next: 'done', returnTo: bad }, start), bad).toEqual({ name: 'done', session: null })
+      expect(stepAfter({ ok: true, status: 'redirected', next: 'redirect', location: bad }, start), bad).toEqual({ name: 'redirect' })
+    }
   })
 })
