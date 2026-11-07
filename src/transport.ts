@@ -5,7 +5,7 @@
 // `Cauthy-Protocol: 1`; a sign-in answer gets its `next`.
 
 import { errorFrom, UNAVAILABLE, type AuthError } from './errors'
-import { ROUTES, type GetRouteId, type PostRouteId, type RouteBodies, type RouteId } from './generated/routes'
+import { ROUTES, type GetRouteId, type PostRouteId, type RouteBodies, type RouteId, type RouteQueries } from './generated/routes'
 import { nextFrom, REQUEST_HEADER, watchProtocol, type ProtocolMismatch } from './protocol'
 import { isLocalPath, withoutTrailingSlashes } from './url'
 import type { FieldProblem } from './validate'
@@ -22,17 +22,25 @@ export interface TransportOptions {
 
 export type Query = Record<string, string | undefined>
 
+type Required_<Q> = { [K in keyof Q as {} extends Pick<Q, K> ? never : K]-?: string }
+type Optional_<Q> = { [K in keyof Q as {} extends Pick<Q, K> ? K : never]?: string | undefined }
+/**
+ * The query of route `I` as the spec names it (`RouteQueries`), every value
+ * a string as it goes in the address; an undefined one is left out.
+ */
+export type QueryOf<I extends RouteId> = string extends keyof RouteQueries[I] ? Record<string, never> : Required_<RouteQueries[I]> & Optional_<RouteQueries[I]>
+
 export interface Transport {
   /** `basePath`, without trailing slashes. */
   readonly base: string
   /** The address of a route, with its query; `provider` fills `{provider}`. Undefined query values are left out. */
-  href(id: RouteId, query?: Query, provider?: string): string
+  href<I extends RouteId>(id: I, query?: QueryOf<I>, provider?: string): string
   /** Sends a POST route's body. `bad`: what the form found wrong, answered without sending. */
   post<I extends PostRouteId>(id: I, body: RouteBodies[I], bad?: FieldProblem | null, captchaToken?: string): Promise<any>
   /** Reads a GET route: its JSON, or null when refused or unreachable. */
-  read(id: GetRouteId, query?: Query): Promise<any | null>
+  read<I extends GetRouteId>(id: I, query?: QueryOf<I>): Promise<any | null>
   /** Reads a GET route, saying why when it was refused. */
-  get(id: GetRouteId, query?: Query): Promise<{ ok: true; body: any } | { ok: false; error: AuthError }>
+  get<I extends GetRouteId>(id: I, query?: QueryOf<I>): Promise<{ ok: true; body: any } | { ok: false; error: AuthError }>
 }
 
 /**
@@ -58,11 +66,11 @@ export function createTransport(options: TransportOptions = {}): Transport {
     return l ? { 'x-cauthy-locale': l } : {}
   }
 
-  function href(id: RouteId, query: Query = {}, provider?: string): string {
+  function href<I extends RouteId>(id: I, query?: QueryOf<I>, provider?: string): string {
     let path: string = ROUTES[id].path
     if (path.includes('{provider}')) path = path.replace('{provider}', encodeURIComponent(provider ?? ''))
     const q = new URLSearchParams()
-    for (const [k, v] of Object.entries(query)) if (v !== undefined) q.set(k, v)
+    for (const [k, v] of Object.entries((query ?? {}) as Query)) if (v !== undefined) q.set(k, v)
     const s = q.toString()
     return `${base}${path}${s === '' ? '' : `?${s}`}`
   }
@@ -98,7 +106,7 @@ export function createTransport(options: TransportOptions = {}): Transport {
     }
   }
 
-  async function get(id: GetRouteId, query?: Query): Promise<{ ok: true; body: any } | { ok: false; error: AuthError }> {
+  async function get<I extends GetRouteId>(id: I, query?: QueryOf<I>): Promise<{ ok: true; body: any } | { ok: false; error: AuthError }> {
     try {
       const res = await doFetch(href(id, query), { credentials: 'same-origin', headers: { accept: 'application/json', ...lang() } })
       watch(res)
@@ -109,7 +117,7 @@ export function createTransport(options: TransportOptions = {}): Transport {
     }
   }
 
-  async function read(id: GetRouteId, query?: Query): Promise<any | null> {
+  async function read<I extends GetRouteId>(id: I, query?: QueryOf<I>): Promise<any | null> {
     const r = await get(id, query)
     return r.ok ? r.body : null
   }

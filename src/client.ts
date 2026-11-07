@@ -10,7 +10,7 @@
 // before it is sent, with the rules the server checks again.
 
 import { UNAVAILABLE, type AuthError, type AuthResult } from './errors'
-import type { PostRouteId } from './generated/routes'
+import type { PostRouteId, RouteBodies } from './generated/routes'
 import { promptGoogleOneTap } from './one-tap'
 import { canAutofillPasskeys, canUsePasskeys, ceremonyError, getPasskey, makePasskey } from './passkey'
 import { fromWire, type CauthyTheme } from './theme'
@@ -579,8 +579,8 @@ export function createAuthClient(options: AuthClientOptions = {}): AuthClient {
   }
 
   /** The two steps of a ceremony: what to ask the browser, then its answer. */
-  async function ceremony(begin: PostRouteId, form: Record<string, unknown>, finish: PostRouteId, run: (options: any) => Promise<Record<string, unknown>>, more: Record<string, unknown> = {}): Promise<any> {
-    const begun = await post(begin, form as never)
+  async function ceremony<B extends PostRouteId, F extends PostRouteId>(begin: B, form: RouteBodies[B], finish: F, run: (options: any) => Promise<Record<string, unknown>>, more?: Omit<RouteBodies[F], 'credential'>): Promise<any> {
+    const begun = await post(begin, form)
     if (!begun.ok) return begun
     let credential: Record<string, unknown>
     try {
@@ -588,7 +588,7 @@ export function createAuthClient(options: AuthClientOptions = {}): AuthClient {
     } catch (e) {
       return { ok: false, error: ceremonyError(e) }
     }
-    return post(finish, { credential, ...more } as never)
+    return post(finish, { ...more, credential } as RouteBodies[F])
   }
 
   return {
