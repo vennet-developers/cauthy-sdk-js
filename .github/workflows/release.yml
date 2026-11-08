@@ -26,6 +26,6 @@ jobs:
       - name: the route table is the spec's
         run: npm run check:routes
       - run: npm run check:package
+      - name: npm that publishes through trusted publishing (OIDC, no token)
+        run: npm install -g npm@11.19.1
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
