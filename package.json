@@ -90,5 +90,10 @@
   "type": "commonjs",
   "engines": {
     "node": ">=20.0.0"
+  },
+  "overrides": {
+    "tsup": {
+      "esbuild": "0.28.2"
+    }
   }
 }
