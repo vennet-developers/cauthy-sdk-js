@@ -75,7 +75,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
     "@types/node": "20.19.41",
-    "cauthy-auth": "0.42.0",
+    "cauthy-auth": "0.43.0",
     "jsdom": "26.1.0",
     "publint": "0.3.25",
     "tsup": "8.5.1",
